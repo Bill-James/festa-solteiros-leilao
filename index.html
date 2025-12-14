@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Festa dos Solteiros - Leilão</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, onValue, set, push, remove, update } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+        
+        // ⚠️ COLE AQUI SUAS CREDENCIAIS DO FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyBUbmHryijxLFMfe_YKOKLPfOAKJMIZd0A",
+            authDomain: "festa-solteiros-leilao.firebaseapp.com",
+            databaseURL: "https://festa-solteiros-leilao-default-rtdb.firebaseio.com",
+            projectId: "festa-solteiros-leilao",
+            storageBucket: "festa-solteiros-leilao.firebasestorage.app",
+            messagingSenderId: "774027959784",
+            appId: "1:774027959784:web:f8a244f3b937732ca2985d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        window.database = getDatabase(app);
+        window.firebaseDB = { ref, onValue, set, push, remove, update };
+    </script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel" src="app.js"></script>
+</body>
+</html>
