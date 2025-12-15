@@ -51,9 +51,11 @@
     const App = () => {
       const [view, setView] = useState('login');
       const [participantNumber, setParticipantNumber] = useState('');
+      const [organizerPassword, setOrganizerPassword] = useState('');
       const [experiences, setExperiences] = useState([]);
       const [selectedExp, setSelectedExp] = useState(null);
       const [bidAmount, setBidAmount] = useState('');
+      const [currentTime, setCurrentTime] = useState(Date.now());
 
       const [newExp, setNewExp] = useState({
         title: '',
@@ -61,6 +63,14 @@
         duration: 120,
         startingBid: 500
       });
+
+      // Timer para atualizar o tempo em tempo real
+      useEffect(() => {
+        const interval = setInterval(() => {
+          setCurrentTime(Date.now());
+        }, 100);
+        return () => clearInterval(interval);
+      }, []);
 
       useEffect(() => {
         const experiencesRef = ref(database, 'experiences');
@@ -88,13 +98,19 @@
               update(expRef, { status: 'ended' });
             }
           });
-        }, 1000);
+        }, 500);
         return () => clearInterval(interval);
       }, [experiences]);
 
       const handleLogin = (type) => {
         if (type === 'organizer') {
-          setView('organizer');
+          // Senha do organizador: admin123
+          if (organizerPassword === 'admin123') {
+            setView('organizer');
+            setOrganizerPassword('');
+          } else {
+            alert('Senha incorreta!');
+          }
         } else {
           if (participantNumber.trim()) {
             setView('participant');
@@ -152,7 +168,7 @@
 
       const getTimeRemaining = (exp) => {
         if (exp.status !== 'active') return null;
-        const remaining = Math.max(0, exp.endTime - Date.now());
+        const remaining = Math.max(0, exp.endTime - currentTime);
         const mins = Math.floor(remaining / 60000);
         const secs = Math.floor((remaining % 60000) / 1000);
         return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -202,6 +218,19 @@
                   <div className="relative flex justify-center text-sm">
                     <span className="px-2 bg-white text-gray-500">ou</span>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Senha do Organizador
+                  </label>
+                  <input
+                    type="password"
+                    value={organizerPassword}
+                    onChange={(e) => setOrganizerPassword(e.target.value)}
+                    placeholder="Digite a senha"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-gray-800 focus:outline-none text-lg"
+                  />
                 </div>
 
                 <button
@@ -485,14 +514,13 @@
                             Retomar
                           </button>
                         )}
-                        {exp.status !== 'ended' && (
-                          <button
-                            onClick={() => cancelExperience(exp.id)}
-                            className="bg-red-500 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-red-600"
-                          >
-                            <X />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => cancelExperience(exp.id)}
+                          className="bg-red-500 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-red-600"
+                          title={exp.status === 'ended' ? 'Apagar' : 'Cancelar'}
+                        >
+                          <X />
+                        </button>
                       </div>
                     </div>
                   ))}
