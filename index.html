@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Festa dos Solteiros - Leilão</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Festa dos Solteiros - Leilão +18</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -13,24 +13,24 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
     import { getDatabase, ref, onValue, set, update, remove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
-    window.firebase = { initializeApp, getDatabase, ref, onValue, set, update, remove };
+    window.firebaseModules = { initializeApp, getDatabase, ref, onValue, set, update, remove };
   </script>
 </head>
 
-<body class="bg-gray-100">
+<body>
 <div id="root"></div>
 
 <script type="text/babel">
 const { useState, useEffect } = React;
-const { initializeApp, getDatabase, ref, onValue, set, update, remove } = window.firebase;
+const { initializeApp, getDatabase, ref, onValue, set, update, remove } = window.firebaseModules;
 
-/* 🔥 Firebase Config */
+/* 🔥 Firebase */
 const firebaseConfig = {
   apiKey: "AIzaSyBUbmHryijxLFMfe_YKOKLPfOAKJMIZd0A",
   authDomain: "festa-solteiros-leilao.firebaseapp.com",
   databaseURL: "https://festa-solteiros-leilao-default-rtdb.firebaseio.com",
   projectId: "festa-solteiros-leilao",
-  storageBucket: "festa-solteiros-leilao.appspot.com",
+  storageBucket: "festa-solteiros-leilao.firebasestorage.app",
   messagingSenderId: "774027959784",
   appId: "1:774027959784:web:f8a244f3b937732ca2985d"
 };
@@ -38,54 +38,54 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 
-function App() {
-
-  const [view, setView] = useState("login");
-  const [organizerPassword, setOrganizerPassword] = useState("");
+const App = () => {
+  const [view, setView] = useState('login');
+  const [organizerPassword, setOrganizerPassword] = useState('');
   const [participantNumber, setParticipantNumber] = useState(null);
+  const [joinedEventId, setJoinedEventId] = useState(null);
   const [experiences, setExperiences] = useState([]);
   const [currentTime, setCurrentTime] = useState(Date.now());
 
   const [newExp, setNewExp] = useState({
-    title: "",
-    description: "",
+    title: '',
+    description: '',
     duration: 120,
     startingBid: 500
   });
 
   /* ⏱️ Tempo em tempo real */
   useEffect(() => {
-    const i = setInterval(() => setCurrentTime(Date.now()), 100);
-    return () => clearInterval(i);
+    const interval = setInterval(() => setCurrentTime(Date.now()), 100);
+    return () => clearInterval(interval);
   }, []);
 
   /* 🔄 Sync experiências */
   useEffect(() => {
-    const r = ref(database, "experiences");
-    onValue(r, snap => {
-      const d = snap.val();
-      setExperiences(d ? Object.keys(d).map(k => ({ id:k, ...d[k] })) : []);
+    const experiencesRef = ref(database, 'experiences');
+    onValue(experiencesRef, (snapshot) => {
+      const data = snapshot.val();
+      setExperiences(data ? Object.keys(data).map(id => ({ id, ...data[id] })) : []);
     });
   }, []);
 
-  /* ⏹️ Encerrar automaticamente */
+  /* ⛔ Encerrar automaticamente */
   useEffect(() => {
-    const i = setInterval(() => {
+    const interval = setInterval(() => {
       experiences.forEach(exp => {
-        if (exp.status === "active" && exp.endTime <= Date.now()) {
-          update(ref(database, `experiences/${exp.id}`), { status: "ended" });
+        if (exp.status === 'active' && exp.endTime <= Date.now()) {
+          update(ref(database, `experiences/${exp.id}`), { status: 'ended' });
         }
       });
     }, 500);
-    return () => clearInterval(i);
+    return () => clearInterval(interval);
   }, [experiences]);
 
-  /* 🔢 NUMERO AUTOMÁTICO */
+  /* 🔢 Número automático */
   const assignParticipantNumber = (eventId) => {
     const counterRef = ref(database, `experiences/${eventId}/participantCounter`);
 
-    onValue(counterRef, snap => {
-      const current = snap.val() || 0;
+    onValue(counterRef, snapshot => {
+      const current = snapshot.val() || 0;
       const next = current + 1;
 
       update(ref(database, `experiences/${eventId}`), {
@@ -93,56 +93,63 @@ function App() {
       });
 
       setParticipantNumber(next);
-      setView("participant");
-
-    }, { onlyOnce:true });
+      setJoinedEventId(eventId);
+      setView('participant');
+    }, { onlyOnce: true });
   };
 
-  /* 🔐 LOGIN */
-  const loginParticipant = () => {
-    const active = experiences.find(e => e.status === "active");
-    if (!active) return alert("Nenhum evento ativo");
-    assignParticipantNumber(active.id);
+  /* 🔐 Login */
+  const handleLogin = (type) => {
+    if (type === 'organizer') {
+      if (organizerPassword === 'admin123') {
+        setView('organizer');
+        setOrganizerPassword('');
+      } else alert('Senha incorreta!');
+    } else {
+      const activeEvent = experiences.find(e => e.status === 'active');
+      if (!activeEvent) {
+        alert('Nenhum leilão ativo no momento');
+        return;
+      }
+      assignParticipantNumber(activeEvent.id);
+    }
   };
 
-  const loginOrganizer = () => {
-    if (organizerPassword === "admin123") {
-      setView("organizer");
-      setOrganizerPassword("");
-    } else alert("Senha errada");
-  };
-
-  /* ➕ Criar Experiência */
+  /* ➕ Criar experiência */
   const createExperience = () => {
-    if (!newExp.title) return;
+    if (!newExp.title.trim()) return;
 
-    const id = Date.now().toString();
-    set(ref(database, `experiences/${id}`), {
+    const expId = Date.now().toString();
+    set(ref(database, `experiences/${expId}`), {
       ...newExp,
-      status: "pending",
+      status: 'pending',
       currentBid: newExp.startingBid,
       leadingBidder: null,
       endTime: null,
-      participantCounter: 0,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      participantCounter: 0
     });
 
-    setNewExp({ title:"", description:"", duration:120, startingBid:500 });
+    setNewExp({ title: '', description: '', duration: 120, startingBid: 500 });
   };
 
-  /* ▶️ Controles */
-  const startExp = id => update(ref(database, `experiences/${id}`), {
-    status:"active",
-    endTime: Date.now() + experiences.find(e=>e.id===id).duration*1000
-  });
+  const startExperience = (id) => {
+    const exp = experiences.find(e => e.id === id);
+    update(ref(database, `experiences/${id}`), {
+      status: 'active',
+      endTime: Date.now() + exp.duration * 1000
+    });
+  };
 
-  const pauseExp = id => update(ref(database, `experiences/${id}`), { status:"paused" });
-  const deleteExp = id => remove(ref(database, `experiences/${id}`));
+  const pauseExperience = id =>
+    update(ref(database, `experiences/${id}`), { status: 'paused' });
 
-  /* 💰 Lances */
+  const cancelExperience = id =>
+    remove(ref(database, `experiences/${id}`));
+
   const placeBid = (id, amount) => {
-    const exp = experiences.find(e=>e.id===id);
-    if (amount > exp.currentBid && exp.status==="active") {
+    const exp = experiences.find(e => e.id === id);
+    if (amount > exp.currentBid && exp.status === 'active') {
       update(ref(database, `experiences/${id}`), {
         currentBid: amount,
         leadingBidder: participantNumber
@@ -150,95 +157,131 @@ function App() {
     }
   };
 
-  /* ⏱️ */
-  const timeLeft = exp => {
-    if (exp.status!=="active") return "--";
-    const r = Math.max(0, exp.endTime-currentTime);
-    return Math.floor(r/60000)+":"+String(Math.floor((r%60000)/1000)).padStart(2,"0");
+  const getTimeRemaining = (exp) => {
+    if (exp.status !== 'active') return null;
+    const remaining = Math.max(0, exp.endTime - currentTime);
+    const mins = Math.floor(remaining / 60000);
+    const secs = Math.floor((remaining % 60000) / 1000);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  /* ================== TELAS ================== */
+  /* ================= LOGIN ================= */
+  if (view === 'login') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-500 via-purple-600 to-red-600 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full space-y-6">
+          <h1 className="text-4xl font-bold text-center">Festa dos Solteiros</h1>
 
-  if (view==="login") return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="bg-white p-8 rounded-xl shadow-xl w-96 space-y-4">
-        <h1 className="text-2xl font-bold text-center">Festa dos Solteiros</h1>
+          <button
+            onClick={() => handleLogin('participant')}
+            className="w-full bg-gradient-to-r from-pink-500 to-red-500 text-white py-4 rounded-xl font-semibold text-lg"
+          >
+            Entrar como Participante
+          </button>
 
-        <button onClick={loginParticipant}
-          className="w-full bg-pink-500 text-white py-3 rounded">
-          Entrar como Participante
-        </button>
+          <input
+            type="password"
+            placeholder="Senha do Organizador"
+            value={organizerPassword}
+            onChange={e => setOrganizerPassword(e.target.value)}
+            className="w-full px-4 py-3 border-2 rounded-xl"
+          />
 
-        <input type="password" placeholder="Senha organizador"
-          value={organizerPassword}
-          onChange={e=>setOrganizerPassword(e.target.value)}
-          className="w-full border p-2 rounded"/>
+          <button
+            onClick={() => handleLogin('organizer')}
+            className="w-full bg-gray-800 text-white py-4 rounded-xl font-semibold"
+          >
+            Painel do Organizador
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-        <button onClick={loginOrganizer}
-          className="w-full bg-gray-800 text-white py-3 rounded">
-          Painel do Organizador
-        </button>
+  /* ================= PARTICIPANTE ================= */
+  if (view === 'participant') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-500 via-purple-600 to-red-600 p-4">
+        <div className="max-w-4xl mx-auto text-white mb-6">
+          <h2 className="text-2xl font-bold">Você é o participante #{participantNumber}</h2>
+        </div>
+
+        <div className="max-w-4xl mx-auto space-y-4">
+          {experiences.map(exp => (
+            <div key={exp.id} className="bg-white rounded-2xl shadow-xl p-6">
+              <h3 className="font-bold text-xl">{exp.title}</h3>
+              <p>Lance atual: {exp.currentBid} Kz</p>
+              <p>Liderando: #{exp.leadingBidder || '---'}</p>
+              {exp.status === 'active' && (
+                <p className="font-mono text-lg">Tempo: {getTimeRemaining(exp)}</p>
+              )}
+
+              {exp.status === 'active' && (
+                <button
+                  onClick={() => placeBid(exp.id, exp.currentBid + 100)}
+                  className="mt-4 w-full bg-gradient-to-r from-pink-500 to-red-500 text-white py-3 rounded-xl font-bold"
+                >
+                  Fazer Lance
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  /* ================= ORGANIZADOR ================= */
+  return (
+    <div className="min-h-screen bg-gray-100 p-6">
+      <h1 className="text-3xl font-bold mb-6">Painel do Organizador</h1>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow">
+          <h2 className="text-xl font-bold mb-4">Nova Experiência</h2>
+
+          <input
+            className="w-full border p-2 mb-2 rounded"
+            placeholder="Título"
+            value={newExp.title}
+            onChange={e => setNewExp({ ...newExp, title: e.target.value })}
+          />
+
+          <textarea
+            className="w-full border p-2 mb-2 rounded"
+            placeholder="Descrição"
+            value={newExp.description}
+            onChange={e => setNewExp({ ...newExp, description: e.target.value })}
+          />
+
+          <button
+            onClick={createExperience}
+            className="w-full bg-gradient-to-r from-pink-500 to-red-500 text-white py-3 rounded-xl font-semibold"
+          >
+            Criar Experiência
+          </button>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow">
+          <h2 className="text-xl font-bold mb-4">Experiências</h2>
+
+          {experiences.map(exp => (
+            <div key={exp.id} className="border rounded p-3 mb-2">
+              <b>{exp.title}</b> — {exp.status}
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => startExperience(exp.id)} className="bg-green-500 text-white px-3 py-1 rounded">Iniciar</button>
+                <button onClick={() => pauseExperience(exp.id)} className="bg-yellow-500 text-white px-3 py-1 rounded">Pausar</button>
+                <button onClick={() => cancelExperience(exp.id)} className="bg-red-500 text-white px-3 py-1 rounded">X</button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
+};
 
-  if (view==="participant") return (
-    <div className="p-6">
-      <h2 className="text-xl font-bold mb-4">Você é o participante #{participantNumber}</h2>
-
-      {experiences.map(exp=>(
-        <div key={exp.id} className="bg-white p-4 rounded shadow mb-3">
-          <h3 className="font-bold">{exp.title}</h3>
-          <p>Lance atual: {exp.currentBid} Kz</p>
-          <p>Liderando: #{exp.leadingBidder || "---"}</p>
-          <p>Tempo: {timeLeft(exp)}</p>
-
-          {exp.status==="active" &&
-            <button onClick={()=>placeBid(exp.id, exp.currentBid+100)}
-              className="mt-2 bg-pink-500 text-white px-4 py-2 rounded">
-              Dar Lance
-            </button>}
-        </div>
-      ))}
-    </div>
-  );
-
-  return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4">Painel do Organizador</h2>
-
-      <input placeholder="Título"
-        value={newExp.title}
-        onChange={e=>setNewExp({...newExp,title:e.target.value})}
-        className="border p-2 mb-2 w-full"/>
-
-      <textarea placeholder="Descrição"
-        value={newExp.description}
-        onChange={e=>setNewExp({...newExp,description:e.target.value})}
-        className="border p-2 mb-2 w-full"/>
-
-      <button onClick={createExperience}
-        className="bg-green-500 text-white px-4 py-2 rounded">
-        Criar Experiência
-      </button>
-
-      <hr className="my-4"/>
-
-      {experiences.map(exp=>(
-        <div key={exp.id} className="border p-3 mb-2 rounded">
-          <b>{exp.title}</b> — {exp.status}
-          <div className="space-x-2 mt-2">
-            <button onClick={()=>startExp(exp.id)} className="bg-green-500 text-white px-2 py-1 rounded">Start</button>
-            <button onClick={()=>pauseExp(exp.id)} className="bg-yellow-500 text-white px-2 py-1 rounded">Pause</button>
-            <button onClick={()=>deleteExp(exp.id)} className="bg-red-500 text-white px-2 py-1 rounded">X</button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-ReactDOM.render(<App/>, document.getElementById("root"));
+ReactDOM.render(<App />, document.getElementById('root'));
 </script>
 </body>
 </html>
