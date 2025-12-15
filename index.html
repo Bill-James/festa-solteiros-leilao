@@ -4,14 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Festa dos Solteiros - Leilão</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Firebase -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getDatabase, ref, onValue, set, push, remove, update } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
-        
         
         const firebaseConfig = {
             apiKey: "AIzaSyBUbmHryijxLFMfe_YKOKLPfOAKJMIZd0A",
@@ -22,14 +23,437 @@
             messagingSenderId: "774027959784",
             appId: "1:774027959784:web:f8a244f3b937732ca2985d"
         };
-
+        
         const app = initializeApp(firebaseConfig);
         window.database = getDatabase(app);
         window.firebaseDB = { ref, onValue, set, push, remove, update };
+        
+        // Disparar evento quando Firebase estiver pronto
+        window.dispatchEvent(new Event('firebaseReady'));
     </script>
-</head>
-<body>
-    <div id="root"></div>
-    <script type="text/babel" src="app.js"></script>
+
+    <!-- React -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Lucide React -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+    <!-- App -->
+    <script>
+        // Aguardar Firebase estar pronto
+        window.addEventListener('firebaseReady', function() {
+            const { useState, useEffect } = React;
+            const { Heart, Flame, Users, Clock, TrendingUp, Plus, Play, Pause, X, LogOut } = lucide;
+            
+            const { ref, onValue, set, push, remove, update } = window.firebaseDB;
+            const database = window.database;
+
+            const App = () => {
+              const [view, setView] = useState('login');
+              const [participantNumber, setParticipantNumber] = useState('');
+              const [experiences, setExperiences] = useState([]);
+              const [selectedExp, setSelectedExp] = useState(null);
+              const [bidAmount, setBidAmount] = useState('');
+
+              const [newExp, setNewExp] = useState({
+                title: '',
+                description: '',
+                duration: 120,
+                startingBid: 500
+              });
+
+              useEffect(() => {
+                const experiencesRef = ref(database, 'experiences');
+                const unsubscribe = onValue(experiencesRef, (snapshot) => {
+                  const data = snapshot.val();
+                  if (data) {
+                    const expArray = Object.entries(data).map(([key, value]) => ({
+                      id: key,
+                      ...value
+                    }));
+                    setExperiences(expArray);
+                  } else {
+                    setExperiences([]);
+                  }
+                });
+
+                return () => unsubscribe();
+              }, []);
+
+              useEffect(() => {
+                const interval = setInterval(() => {
+                  const now = Date.now();
+                  experiences.forEach(exp => {
+                    if (exp.status === 'active' && exp.endTime <= now) {
+                      const expRef = ref(database, `experiences/${exp.id}`);
+                      update(expRef, { status: 'ended' });
+                    }
+                  });
+                }, 1000);
+                
+                return () => clearInterval(interval);
+              }, [experiences]);
+
+              const handleLogin = (type) => {
+                if (type === 'organizer') {
+                  setView('organizer');
+                } else {
+                  if (participantNumber.trim()) {
+                    setView('participant');
+                  }
+                }
+              };
+
+              const createExperience = () => {
+                if (!newExp.title.trim()) return;
+                
+                const experiencesRef = ref(database, 'experiences');
+                const newExpRef = push(experiencesRef);
+                
+                const exp = {
+                  ...newExp,
+                  status: 'pending',
+                  currentBid: newExp.startingBid,
+                  leadingBidder: null,
+                  endTime: null,
+                  createdAt: Date.now()
+                };
+                
+                set(newExpRef, exp);
+                setNewExp({ title: '', description: '', duration: 120, startingBid: 500 });
+              };
+
+              const startExperience = (id) => {
+                const expRef = ref(database, `experiences/${id}`);
+                const exp = experiences.find(e => e.id === id);
+                update(expRef, { 
+                  status: 'active', 
+                  endTime: Date.now() + exp.duration * 1000 
+                });
+              };
+
+              const pauseExperience = (id) => {
+                const expRef = ref(database, `experiences/${id}`);
+                update(expRef, { status: 'paused' });
+              };
+
+              const cancelExperience = (id) => {
+                const expRef = ref(database, `experiences/${id}`);
+                remove(expRef);
+              };
+
+              const placeBid = (expId, amount) => {
+                const exp = experiences.find(e => e.id === expId);
+                if (amount > exp.currentBid && exp.status === 'active') {
+                  const expRef = ref(database, `experiences/${expId}`);
+                  update(expRef, {
+                    currentBid: amount,
+                    leadingBidder: participantNumber
+                  });
+                  setSelectedExp(null);
+                  setBidAmount('');
+                }
+              };
+
+              const getTimeRemaining = (exp) => {
+                if (exp.status !== 'active') return null;
+                const remaining = Math.max(0, exp.endTime - Date.now());
+                const mins = Math.floor(remaining / 60000);
+                const secs = Math.floor((remaining % 60000) / 1000);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+              };
+
+              if (view === 'login') {
+                return React.createElement('div', { className: "min-h-screen bg-gradient-to-br from-pink-500 via-purple-600 to-red-600 flex items-center justify-center p-4" },
+                  React.createElement('div', { className: "bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full" },
+                    React.createElement('div', { className: "text-center mb-8" },
+                      React.createElement('div', { className: "flex justify-center mb-4" },
+                        React.createElement('div', { className: "bg-gradient-to-r from-pink-500 to-red-500 p-4 rounded-full" },
+                          React.createElement(Heart, { className: "w-12 h-12 text-white", fill: "currentColor" })
+                        )
+                      ),
+                      React.createElement('h1', { className: "text-4xl font-bold text-gray-800 mb-2" }, 'Festa dos Solteiros'),
+                      React.createElement('p', { className: "text-gray-600" }, 'Leilão de Experiências +18')
+                    ),
+                    React.createElement('div', { className: "space-y-6" },
+                      React.createElement('div', null,
+                        React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-2" }, 'Número do Participante'),
+                        React.createElement('input', {
+                          type: "text",
+                          value: participantNumber,
+                          onChange: (e) => setParticipantNumber(e.target.value),
+                          placeholder: "Ex: 42",
+                          className: "w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-pink-500 focus:outline-none text-lg"
+                        })
+                      ),
+                      React.createElement('button', {
+                        onClick: () => handleLogin('participant'),
+                        disabled: !participantNumber.trim(),
+                        className: "w-full bg-gradient-to-r from-pink-500 to-red-500 text-white py-4 rounded-xl font-semibold text-lg hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      },
+                        React.createElement(Users, { className: "w-5 h-5" }),
+                        'Entrar como Participante'
+                      ),
+                      React.createElement('div', { className: "relative" },
+                        React.createElement('div', { className: "absolute inset-0 flex items-center" },
+                          React.createElement('div', { className: "w-full border-t border-gray-300" })
+                        ),
+                        React.createElement('div', { className: "relative flex justify-center text-sm" },
+                          React.createElement('span', { className: "px-2 bg-white text-gray-500" }, 'ou')
+                        )
+                      ),
+                      React.createElement('button', {
+                        onClick: () => handleLogin('organizer'),
+                        className: "w-full bg-gray-800 text-white py-4 rounded-xl font-semibold text-lg hover:bg-gray-700 transition-all flex items-center justify-center gap-2"
+                      },
+                        React.createElement(Flame, { className: "w-5 h-5" }),
+                        'Painel do Organizador'
+                      )
+                    )
+                  )
+                );
+              }
+
+              if (view === 'participant') {
+                return React.createElement('div', { className: "min-h-screen bg-gradient-to-br from-pink-500 via-purple-600 to-red-600 p-4" },
+                  React.createElement('div', { className: "max-w-4xl mx-auto" },
+                    React.createElement('div', { className: "bg-white/10 backdrop-blur-md rounded-2xl p-4 mb-6 flex items-center justify-between" },
+                      React.createElement('div', { className: "flex items-center gap-3" },
+                        React.createElement('div', { className: "bg-white p-2 rounded-full" },
+                          React.createElement(Heart, { className: "w-6 h-6 text-pink-500", fill: "currentColor" })
+                        ),
+                        React.createElement('div', null,
+                          React.createElement('p', { className: "text-white text-sm" }, 'Você é o participante'),
+                          React.createElement('p', { className: "text-white font-bold text-xl" }, '#' + participantNumber)
+                        )
+                      ),
+                      React.createElement('button', {
+                        onClick: () => setView('login'),
+                        className: "bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                      },
+                        React.createElement(LogOut, { className: "w-4 h-4" }),
+                        'Sair'
+                      )
+                    ),
+                    React.createElement('div', { className: "space-y-4" },
+                      experiences.length === 0 && React.createElement('div', { className: "bg-white/10 backdrop-blur-md rounded-2xl p-8 text-center text-white" },
+                        React.createElement(Flame, { className: "w-16 h-16 mx-auto mb-4 opacity-50" }),
+                        React.createElement('p', { className: "text-xl" }, 'Nenhuma experiência disponível ainda...')
+                      ),
+                      experiences.map(exp =>
+                        React.createElement('div', { key: exp.id, className: "bg-white rounded-2xl shadow-xl overflow-hidden" },
+                          React.createElement('div', { className: "bg-gradient-to-r from-pink-500 to-red-500 p-4" },
+                            React.createElement('h3', { className: "text-white font-bold text-xl" }, exp.title),
+                            React.createElement('p', { className: "text-white/90 text-sm mt-1" }, exp.description)
+                          ),
+                          React.createElement('div', { className: "p-6" },
+                            React.createElement('div', { className: "grid grid-cols-2 gap-4 mb-4" },
+                              React.createElement('div', { className: "bg-gray-50 rounded-xl p-4" },
+                                React.createElement('p', { className: "text-gray-600 text-sm mb-1" }, 'Lance Atual'),
+                                React.createElement('p', { className: "text-2xl font-bold text-gray-800" }, exp.currentBid.toLocaleString() + ' Kz')
+                              ),
+                              React.createElement('div', { className: "bg-gray-50 rounded-xl p-4" },
+                                React.createElement('p', { className: "text-gray-600 text-sm mb-1" }, 'Liderando'),
+                                React.createElement('p', { className: "text-2xl font-bold text-pink-600" }, exp.leadingBidder ? '#' + exp.leadingBidder : '---')
+                              )
+                            ),
+                            exp.status === 'active' && React.createElement('div', { className: "bg-yellow-50 border-2 border-yellow-400 rounded-xl p-4 mb-4 flex items-center justify-between" },
+                              React.createElement('div', { className: "flex items-center gap-2" },
+                                React.createElement(Clock, { className: "w-5 h-5 text-yellow-600" }),
+                                React.createElement('span', { className: "font-bold text-yellow-800" }, 'Tempo Restante:')
+                              ),
+                              React.createElement('span', { className: "text-2xl font-mono font-bold text-yellow-800" }, getTimeRemaining(exp))
+                            ),
+                            exp.status === 'ended' && React.createElement('div', { className: "bg-green-50 border-2 border-green-400 rounded-xl p-4 mb-4 text-center" },
+                              React.createElement('p', { className: "font-bold text-green-800 text-lg" }, '🎉 Leilão Encerrado!'),
+                              React.createElement('p', { className: "text-green-700 mt-2" },
+                                'Vencedor: ',
+                                React.createElement('span', { className: "font-bold" }, '#' + (exp.leadingBidder || 'Nenhum'))
+                              )
+                            ),
+                            exp.status === 'pending' && React.createElement('div', { className: "bg-blue-50 border-2 border-blue-400 rounded-xl p-4 mb-4 text-center" },
+                              React.createElement('p', { className: "font-bold text-blue-800" }, '⏳ Aguardando início...')
+                            ),
+                            exp.status === 'paused' && React.createElement('div', { className: "bg-gray-50 border-2 border-gray-400 rounded-xl p-4 mb-4 text-center" },
+                              React.createElement('p', { className: "font-bold text-gray-800" }, '⏸️ Leilão Pausado')
+                            ),
+                            exp.status === 'active' && React.createElement('button', {
+                              onClick: () => setSelectedExp(exp),
+                              className: "w-full bg-gradient-to-r from-pink-500 to-red-500 text-white py-4 rounded-xl font-bold text-lg hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                            },
+                              React.createElement(TrendingUp, { className: "w-5 h-5" }),
+                              'Fazer Lance'
+                            )
+                          )
+                        )
+                      )
+                    )
+                  ),
+                  selectedExp && React.createElement('div', { className: "fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" },
+                    React.createElement('div', { className: "bg-white rounded-2xl p-6 max-w-md w-full" },
+                      React.createElement('h3', { className: "text-2xl font-bold mb-4" }, selectedExp.title),
+                      React.createElement('p', { className: "text-gray-600 mb-4" },
+                        'Lance atual: ',
+                        React.createElement('span', { className: "font-bold" }, selectedExp.currentBid.toLocaleString() + ' Kz')
+                      ),
+                      React.createElement('input', {
+                        type: "number",
+                        value: bidAmount,
+                        onChange: (e) => setBidAmount(e.target.value),
+                        placeholder: `Mínimo: ${selectedExp.currentBid + 100} Kz`,
+                        className: "w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-pink-500 focus:outline-none text-lg mb-4"
+                      }),
+                      React.createElement('div', { className: "flex gap-3" },
+                        React.createElement('button', {
+                          onClick: () => {
+                            setSelectedExp(null);
+                            setBidAmount('');
+                          },
+                          className: "flex-1 bg-gray-200 text-gray-800 py-3 rounded-xl font-semibold hover:bg-gray-300"
+                        }, 'Cancelar'),
+                        React.createElement('button', {
+                          onClick: () => placeBid(selectedExp.id, parseInt(bidAmount)),
+                          className: "flex-1 bg-gradient-to-r from-pink-500 to-red-500 text-white py-3 rounded-xl font-semibold hover:shadow-lg"
+                        }, 'Confirmar Lance')
+                      )
+                    )
+                  )
+                );
+              }
+
+              // Painel do Organizador
+              return React.createElement('div', { className: "min-h-screen bg-gray-100 p-4" },
+                React.createElement('div', { className: "max-w-6xl mx-auto" },
+                  React.createElement('div', { className: "bg-white rounded-2xl shadow-lg p-6 mb-6" },
+                    React.createElement('div', { className: "flex items-center justify-between" },
+                      React.createElement('div', { className: "flex items-center gap-3" },
+                        React.createElement('div', { className: "bg-gradient-to-r from-pink-500 to-red-500 p-3 rounded-full" },
+                          React.createElement(Flame, { className: "w-6 h-6 text-white" })
+                        ),
+                        React.createElement('div', null,
+                          React.createElement('h1', { className: "text-2xl font-bold text-gray-800" }, 'Painel do Organizador'),
+                          React.createElement('p', { className: "text-gray-600" }, 'Gerencie as experiências do leilão')
+                        )
+                      ),
+                      React.createElement('button', {
+                        onClick: () => setView('login'),
+                        className: "bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg flex items-center gap-2"
+                      },
+                        React.createElement(LogOut, { className: "w-4 h-4" }),
+                        'Sair'
+                      )
+                    )
+                  ),
+                  React.createElement('div', { className: "grid md:grid-cols-2 gap-6" },
+                    React.createElement('div', { className: "bg-white rounded-2xl shadow-lg p-6" },
+                      React.createElement('h2', { className: "text-xl font-bold mb-4 flex items-center gap-2" },
+                        React.createElement(Plus, { className: "w-5 h-5" }),
+                        'Nova Experiência'
+                      ),
+                      React.createElement('div', { className: "space-y-4" },
+                        React.createElement('input', {
+                          type: "text",
+                          value: newExp.title,
+                          onChange: (e) => setNewExp({...newExp, title: e.target.value}),
+                          placeholder: "Título (ex: Jantar Romântico)",
+                          className: "w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none"
+                        }),
+                        React.createElement('textarea', {
+                          value: newExp.description,
+                          onChange: (e) => setNewExp({...newExp, description: e.target.value}),
+                          placeholder: "Descrição da experiência...",
+                          className: "w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none h-24"
+                        }),
+                        React.createElement('div', { className: "grid grid-cols-2 gap-4" },
+                          React.createElement('div', null,
+                            React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-1" }, 'Duração (segundos)'),
+                            React.createElement('input', {
+                              type: "number",
+                              value: newExp.duration,
+                              onChange: (e) => setNewExp({...newExp, duration: parseInt(e.target.value)}),
+                              className: "w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none"
+                            })
+                          ),
+                          React.createElement('div', null,
+                            React.createElement('label', { className: "block text-sm font-medium text-gray-700 mb-1" }, 'Lance Inicial (Kz)'),
+                            React.createElement('input', {
+                              type: "number",
+                              value: newExp.startingBid,
+                              onChange: (e) => setNewExp({...newExp, startingBid: parseInt(e.target.value)}),
+                              className: "w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-pink-500 focus:outline-none"
+                            })
+                          )
+                        ),
+                        React.createElement('button', {
+                          onClick: createExperience,
+                          className: "w-full bg-gradient-to-r from-pink-500 to-red-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all"
+                        }, 'Criar Experiência')
+                      )
+                    ),
+                    React.createElement('div', { className: "bg-white rounded-2xl shadow-lg p-6" },
+                      React.createElement('h2', { className: "text-xl font-bold mb-4" }, 'Experiências Ativas'),
+                      React.createElement('div', { className: "space-y-3 max-h-96 overflow-y-auto" },
+                        experiences.map(exp =>
+                          React.createElement('div', { key: exp.id, className: "border-2 border-gray-200 rounded-lg p-4" },
+                            React.createElement('div', { className: "flex items-start justify-between mb-2" },
+                              React.createElement('div', null,
+                                React.createElement('h3', { className: "font-bold" }, exp.title),
+                                React.createElement('p', { className: "text-sm text-gray-600" }, exp.currentBid.toLocaleString() + ' Kz')
+                              ),
+                              React.createElement('span', {
+                                className: `px-2 py-1 rounded text-xs font-semibold ${
+                                  exp.status === 'active' ? 'bg-green-100 text-green-800' :
+                                  exp.status === 'paused' ? 'bg-yellow-100 text-yellow-800' :
+                                  exp.status === 'ended' ? 'bg-gray-100 text-gray-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }`
+                              },
+                                exp.status === 'active' ? 'Ativo' :
+                                exp.status === 'paused' ? 'Pausado' :
+                                exp.status === 'ended' ? 'Encerrado' : 'Pendente'
+                              )
+                            ),
+                            React.createElement('div', { className: "flex gap-2" },
+                              exp.status === 'pending' && React.createElement('button', {
+                                onClick: () => startExperience(exp.id),
+                                className: "flex-1 bg-green-500 text-white py-2 rounded text-sm font-semibold hover:bg-green-600 flex items-center justify-center gap-1"
+                              },
+                                React.createElement(Play, { className: "w-4 h-4" }),
+                                'Iniciar'
+                              ),
+                              exp.status === 'active' && React.createElement('button', {
+                                onClick: () => pauseExperience(exp.id),
+                                className: "flex-1 bg-yellow-500 text-white py-2 rounded text-sm font-semibold hover:bg-yellow-600 flex items-center justify-center gap-1"
+                              },
+                                React.createElement(Pause, { className: "w-4 h-4" }),
+                                'Pausar'
+                              ),
+                              exp.status === 'paused' && React.createElement('button', {
+                                onClick: () => startExperience(exp.id),
+                                className: "flex-1 bg-green-500 text-white py-2 rounded text-sm font-semibold hover:bg-green-600 flex items-center justify-center gap-1"
+                              },
+                                React.createElement(Play, { className: "w-4 h-4" }),
+                                'Retomar'
+                              ),
+                              exp.status !== 'ended' && React.createElement('button', {
+                                onClick: () => cancelExperience(exp.id),
+                                className: "bg-red-500 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-red-600"
+                              },
+                                React.createElement(X, { className: "w-4 h-4" })
+                              )
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              );
+            };
+
+            ReactDOM.render(React.createElement(App), document.getElementById('root'));
+        });
+    </script>
 </body>
 </html>
